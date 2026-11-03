@@ -2,7 +2,7 @@
   "name": "dsh-watchlist",
   "version": "1.0.0",
   "type": "module",
-  "description": "Follow list above the sidebar conversation list: status dots, newest reply first, and a follow toggle beside the model selector.",
+  "description": "在侧边栏对话列表上方增加关注区：状态圆点、新回复置顶、运行中的置底，模型选择器旁还有关注按钮。 Follow list above the sidebar conversation list, with a follow toggle beside the model selector.",
   "license": "MIT",
   "author": "774015352-sys",
   "repository": {
