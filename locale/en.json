@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Watchlist",
+    "description": "Adds a watched-conversation area above the workspace list and a follow toggle left of the model selector."
+  }
+}

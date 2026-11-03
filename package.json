@@ -1,0 +1,56 @@
+{
+  "name": "dsh-watchlist",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Follow list above the sidebar conversation list: status dots, newest reply first, and a follow toggle beside the model selector.",
+  "license": "MIT",
+  "author": "774015352-sys",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/774015352-sys/dsh-watchlist.git"
+  },
+  "homepage": "https://github.com/774015352-sys/dsh-watchlist#readme",
+  "bugs": {
+    "url": "https://github.com/774015352-sys/dsh-watchlist/issues"
+  },
+  "icon": "icon.svg",
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "watchlist",
+    "sidebar",
+    "unread",
+    "follow"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}
