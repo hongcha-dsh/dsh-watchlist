@@ -4,14 +4,14 @@
   "type": "module",
   "description": "在侧边栏对话列表上方增加关注区：状态圆点、新回复置顶、运行中的置底，模型选择器旁还有关注按钮。 Follow list above the sidebar conversation list, with a follow toggle beside the model selector.",
   "license": "MIT",
-  "author": "774015352-sys",
+  "author": "hongcha-dsh",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/774015352-sys/dsh-watchlist.git"
+    "url": "git+https://github.com/hongcha-dsh/dsh-watchlist.git"
   },
-  "homepage": "https://github.com/774015352-sys/dsh-watchlist#readme",
+  "homepage": "https://github.com/hongcha-dsh/dsh-watchlist#readme",
   "bugs": {
-    "url": "https://github.com/774015352-sys/dsh-watchlist/issues"
+    "url": "https://github.com/hongcha-dsh/dsh-watchlist/issues"
   },
   "icon": "icon.svg",
   "keywords": [

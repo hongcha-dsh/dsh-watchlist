@@ -18,7 +18,7 @@
 ## 安装
 
 ```sh
-dsh plugin add github:774015352-sys/dsh-watchlist
+dsh plugin add github:hongcha-dsh/dsh-watchlist
 ```
 
 装完重启 Harness：前端在下次加载页面时生效，Host 那一半需要重启。
@@ -83,7 +83,7 @@ Conversations you care about stay in one place at the top of the left sidebar, e
 ### Install
 
 ```sh
-dsh plugin add github:774015352-sys/dsh-watchlist
+dsh plugin add github:hongcha-dsh/dsh-watchlist
 ```
 
 Then restart Harness. The Client half is served on the next page load; the Host half needs the restart.
