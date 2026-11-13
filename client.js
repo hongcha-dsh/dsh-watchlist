@@ -606,7 +606,7 @@ window.__ModuleLoader__.load({
     /** Locale namespace owned by this plugin. */
     const NS = 'dsh-watchlist'
     /** Generation marker, reported to the Host so a stale page bundle is obvious. */
-    const VERSION = 'v32'
+    const VERSION = 'v39'
     /** Storage key of the durable watch state. */
     const STORAGE_KEY = 'dsh-watchlist:v1'
     /** Host route serving failure notices this page cannot observe itself. */
@@ -670,6 +670,7 @@ window.__ModuleLoader__.load({
       'panel.markUnread': '标记未读',
       'panel.unread': '未读',
       'panel.running': '正在运行',
+      'panel.subagents': '个子代理在跑',
       'panel.waiting': '等待回复',
       'panel.failed': '任务失败',
       'panel.idle': '空闲',
@@ -685,6 +686,7 @@ window.__ModuleLoader__.load({
       'panel.markUnread': 'Mark unread',
       'panel.unread': 'Unread',
       'panel.running': 'Running',
+      'panel.subagents': 'subagents running',
       'panel.waiting': 'Waiting for reply',
       'panel.failed': 'Task failed',
       'panel.idle': 'Idle',
@@ -817,7 +819,7 @@ window.__ModuleLoader__.load({
           if (debugLog.length > 14) debugLog.shift()
         }
         /** Filled in once the panel model exists; the first poll may run before that. */
-        let debugSnapshot = () => ''
+        let debugSnapshot = () => 'init'
         /** Record one row's subagent nature; returns whether the row is a child. */
         const noteSubagent = (id, row) => {
           if (!isSubagentRow(row)) return false
@@ -910,6 +912,53 @@ window.__ModuleLoader__.load({
         const openIds = () => {
           const rows = rowsOf()
           return new Set(Object.keys(rows).filter(id => (rows[id].retainedBy?.mainView ?? 0) > 0))
+        }
+
+        /**
+         * How many delegated children are still working, per parent conversation.
+         *
+         * A conversation that hands work to a subagent finishes its own turn when
+         * the dispatch returns, while the child keeps running for minutes. The
+         * row's own `running` flag therefore says "idle", and the watch area used
+         * to drop such a row into the unread group the moment the dispatch turn
+         * ended — it looked finished while the work was still going. The Host
+         * publishes the child list per parent (`projectionsBySession[id].values.
+         * subagentCatalog`) and the sidebar itself shows "N subagents running", so
+         * a parent with live children counts as running here too. The listed child
+         * rows are a fallback for a projection that has not arrived yet.
+         * @param {Map<string, object>} statuses - status map.
+         * @param {Record<string, object>} rows - Session list rows keyed by session id.
+         * @returns {Map<string, number>} parent id to running child count (absent when none).
+         */
+        const runningChildCounts = (statuses, rows) => {
+          const projections = ctx.sessions.list.getSnapshot().projectionsBySession ?? {}
+          /** @type {Map<string, Set<string>>} */
+          const parents = new Map()
+          const note = (parent, child) => {
+            if (typeof parent !== 'string' || parent === '') return
+            if (typeof child !== 'string' || child === '') return
+            const known = parents.get(parent)
+            if (known === undefined) parents.set(parent, new Set([child]))
+            else known.add(child)
+          }
+          for (const [parent, projection] of Object.entries(projections)) {
+            const catalog = projection?.values?.subagentCatalog
+            if (!Array.isArray(catalog)) continue
+            for (const child of catalog) note(parent, child?.id)
+          }
+          for (const [child, row] of Object.entries(rows)) {
+            if (row?.origin !== 'subagent') continue
+            note(row.parentSessionId, child)
+          }
+          const counts = new Map()
+          for (const [parent, children] of parents) {
+            let running = 0
+            for (const child of children) {
+              if (statuses.get(child)?.running === true || rows[child]?.running === true) running += 1
+            }
+            if (running > 0) counts.set(parent, running)
+          }
+          return counts
         }
 
         // `uiSession` owns running/waiting/unread-completion; it may mount after
@@ -1061,12 +1110,18 @@ window.__ModuleLoader__.load({
          * @param {Set<string>} open - ids open in the main view.
          * @param {object} state - watch state.
          * @param {Record<string, object>} failures - failure notices.
-         * @returns {{ id: string, title: string, status: string, running: boolean, order: number, open: boolean }} entry.
+         * @param {Record<string, object>} rows - Session list rows.
+         * @param {Map<string, number>} childCounts - running child count per parent.
+         * @returns {{ id: string, title: string, status: string, running: boolean, children: number, unread: boolean, order: number, open: boolean }} entry.
          */
-        const entryOf = (id, statuses, open, state, failures) => {
-          const row = rowsOf()[id]
+        const entryOf = (id, statuses, open, state, failures, rows, childCounts) => {
+          const row = rows[id]
           const status = statuses.get(id)
-          const running = status?.running === true || row?.running === true
+          const children = childCounts.get(id) ?? 0
+          // A parent whose delegated children are still working is working too: its
+          // own turn is over, so `running` alone would call it idle and the unread
+          // group would swallow it before the child ever reports back.
+          const running = status?.running === true || row?.running === true || children > 0
           const waiting = status?.pendingInteraction !== undefined
           const failed = failures[id] !== undefined
           // A conversation that awaits an answer is still "running" technically,
@@ -1085,6 +1140,7 @@ window.__ModuleLoader__.load({
             title,
             status: kind,
             running,
+            children,
             unread: state.unread.includes(id),
             order: state.order[id] ?? row?.updatedAt ?? UNSEEN_ORDER,
             open: open.has(id),
@@ -1101,9 +1157,10 @@ window.__ModuleLoader__.load({
           const statuses = statusesOf()
           const failures = failureStore.get()
           const rows = rowsOf()
+          const childCounts = runningChildCounts(statuses, rows)
           const entries = state.ids
             .filter(id => !subagentIds.has(id) && (rows[id] !== undefined || titles.has(id)))
-            .map(id => entryOf(id, statuses, open, state, failures))
+            .map(id => entryOf(id, statuses, open, state, failures, rows, childCounts))
           // Newest conversation first; conversations that are running go last.
           entries.sort((a, b) => {
             if (a.running !== b.running) return a.running ? 1 : -1
@@ -1171,12 +1228,18 @@ window.__ModuleLoader__.load({
           // handled once per visit and not re-run on every tick.
           readViewed()
           const rows = snapshot.byId ?? {}
+          // A parent is still working while its delegated children run: the
+          // dispatch turn ends, the child does not. Folding the count in here keeps
+          // the diff honest — the row neither leaves the working group nor turns
+          // unread until the last child reports back.
+          const childCounts = runningChildCounts(statuses, rows)
           const next = new Map()
           for (const [id, row] of Object.entries(rows)) {
             // A delegated child conversation is never news of its own.
             if (noteSubagent(id, row)) continue
             next.set(id, {
-              running: statuses.get(id)?.running === true || row?.running === true,
+              running: statuses.get(id)?.running === true || row?.running === true
+                || (childCounts.get(id) ?? 0) > 0,
               updatedAt: row?.updatedAt,
               blank: row?.blank === true,
             })
@@ -1237,10 +1300,17 @@ window.__ModuleLoader__.load({
         // really rose to the top without a screenshot.
         debugSnapshot = () => {
           try {
-            const rows = modelOf().entries.map(entry => `${entry.id.slice(-6)}:${entry.status.slice(0, 1)}:${entry.order}`)
-            return `${rows.join(' ')}|${debugLog.join(' ')}`.slice(0, 1200)
-          } catch {
-            return ''
+            const rows = modelOf().entries.map(entry => `${entry.id.slice(-6)}:${entry.status.slice(0, 1)}:${entry.children > 0 ? entry.children : '-'}:${entry.order}`)
+            // Parents the Host reports a working child for, watched or not, so a
+            // missing row badge is distinguishable from a missing child catalog.
+            const kids = [...runningChildCounts(statusesOf(), rowsOf())]
+              .slice(0, 4)
+              .map(([id, count]) => `${id.slice(-6)}:${count}`)
+              .join(',')
+            return `${rows.join(' ')}|${debugLog.join(' ')}|ch:${kids}`.slice(0, 1200)
+          } catch (error) {
+            // A broken model is invisible from the page; ship the reason instead.
+            return `err:${error instanceof Error ? error.message : String(error)}`.slice(0, 1200)
           }
         }
 
@@ -1405,7 +1475,9 @@ window.__ModuleLoader__.load({
             className: 'dshwl-row',
             role: 'button',
             tabIndex: 0,
-            title: `${entry.title} · ${t(STATUS_KEY[entry.status])}`,
+            title: entry.children > 0
+              ? `${entry.title} · ${t(STATUS_KEY[entry.status])} (${entry.children} ${t('panel.subagents')})`
+              : `${entry.title} · ${t(STATUS_KEY[entry.status])}`,
             'aria-current': entry.open ? 'page' : undefined,
             onClick: () => {
               markRead(entry.id)

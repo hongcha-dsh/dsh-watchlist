@@ -9,7 +9,7 @@
 ## 它做什么
 
 - **关注区在对话列表上方**，压在工作区区域上，并把下面的列表整体下推，两边都能用。
-- **每行一个状态圆点**：绿色＝有新回复且你没看过；黄色＝这一轮结束了，在等你；蓝色闪烁＝正在运行；红色＝这一轮失败了。
+- **每行一个状态圆点**：绿色＝有新回复且你没看过；黄色＝这一轮结束了，在等你；蓝色闪烁＝正在运行（派出子代理、自己在等它跑完也算）；红色＝这一轮失败了。
 - **排序贴合阅读习惯**：有新回复的对话置顶，正在运行的对话置底——它暂时不需要你做什么。点某一行的圆点重新标记未读时，这一行同样会顶到未读/空闲组的第一行（正在运行的仍按原规则留在最后）。
 - **自动进入**：出现内容的新对话、重新发起的对话、刚结束一轮的对话、发出新提问的对话，都会自己进入关注区。**只有**点这一行的 X 或输入框旁的那个按钮才会离开。
 - **行操作**：点这一行直接打开；鼠标悬停时出现两个按钮——圆点用于重新标记未读（顺手把这一行顶到最上面），X 用于结束关注。不悬停时不占位，整行看上去就是「圆点＋标题」。
@@ -34,21 +34,23 @@ dsh plugin add github:hongcha-dsh/dsh-watchlist
 | --- | --- | --- |
 | 黄色 | 在等你 | 会话报告了待处理的交互 |
 | 红色 | 失败 | Host 记录到该会话有一轮失败 |
-| 蓝色（闪烁） | 运行中 | 状态表或会话列表显示正在运行 |
+| 蓝色（闪烁） | 运行中 | 状态表或会话列表显示正在运行，或它还有子代理在跑 |
 | 绿色 | 未读 | 有新回复，而当时你没在看着这条对话 |
 | 灰色 | 空闲 | 已关注，没有新动静 |
 
 「未读」在你真正打开那一条对话时清除，不是按时间清除。一轮结束时**总会**标成未读——哪怕这个对话正开着在主视图里，因为你可能在看关注区或别的窗口；你回复后它会变回蓝色的「运行中」，所以不会一直吵。开着没动的那一条则会一直保持绿色，直到你离开再回来、或点它一次。
 
+派了子代理的对话也一样：分派那一轮结束后，它自己已经空闲，但子代理还在跑，所以它继续按「运行中」显示，不会在子代理没跑完的时候先翻成未读；等最后一个子代理报完，才回到未读、顶到未读组的第一行。
+
 ## 排序
 
-正在运行的对话排在最后。其余按最近一次活动的排序戳倒序，所以刚收到的回复会把那一行顶到最上面。排序戳只会变大：同一毫秒内的两次回复也能保持稳定顺序，重新关注一条对话也不会把它埋到已有行下面。点某一行的圆点重新标记未读时也会刷新这一行的排序戳，于是这一行立刻回到未读/空闲组的第一行；如果它正在运行，则仍留在最后，等这一轮结束再自然置顶。
+正在运行的对话排在最后（在等子代理的同样算运行中）。其余按最近一次活动的排序戳倒序，所以刚收到的回复会把那一行顶到最上面。排序戳只会变大：同一毫秒内的两次回复也能保持稳定顺序，重新关注一条对话也不会把它埋到已有行下面。点某一行的圆点重新标记未读时也会刷新这一行的排序戳，于是这一行立刻回到未读/空闲组的第一行；如果它正在运行，则仍留在最后，等这一轮结束再自然置顶。
 
 ## 它存在哪里
 
 浏览器 profile 里的 `localStorage["dsh-watchlist:v1"]`：关注的 id、未读的 id、排序戳。没有服务端状态，也不跨浏览器同步，清站点数据就重置。
 
-子代理（subagent）的子会话不进关注区——分派工作不该多出一行；fork 出来的对话是普通对话，可以关注。
+子代理（subagent）的子会话不进关注区——分派工作不该多出一行；fork 出来的对话是普通对话，可以关注。派了子代理的父会话在子代理跑完之前按「运行中」显示。
 
 ## Host 那一半
 
@@ -75,7 +77,7 @@ Conversations you care about stay in one place at the top of the left sidebar, e
 ### What it does
 
 - **A watched area above the conversation list.** It is pinned over the sidebar's workspace region and pushes the list below it down, so both stay usable.
-- **Status dots per row.** Green: a reply arrived that you haven't opened. Yellow: the turn ended and it is waiting for you. Blue, blinking: it is running. Red: the turn failed.
+- **Status dots per row.** Green: a reply arrived that you haven't opened. Yellow: the turn ended and it is waiting for you. Blue, blinking: it is running — including a conversation whose delegated subagents are still working. Red: the turn failed.
 - **Ordering that matches how you read.** A conversation with news rises to the top; conversations that are running sink to the bottom, because they need nothing from you yet. Clicking a row's dot to mark it unread lifts that row to the top of the unread/idle group too (a running row still waits at the bottom).
 - **Rows join on their own.** A new conversation with content, a re-started one, a finished turn, and a new prompt all put that conversation in the area. Leaving is explicit only: the row's X, or the composer toggle.
 - **Row actions.** Click a row to open it. Hover for two buttons: the dot marks it unread again and lifts the row to the top, the X unfollows it. Both are hidden until hover, so the row reads as a title with a dot.
@@ -100,21 +102,23 @@ One dot per row, chosen by this priority:
 | --- | --- | --- |
 | Yellow | waiting for you | the session reports a pending interaction |
 | Red | failed | the Host recorded a failed turn for that session |
-| Blue (blinking) | running | the session is running, per the status map or the list |
+| Blue (blinking) | running | the session is running, per the status map or the list, or it still has subagents working |
 | Green | unread | a reply arrived while you were not looking at that conversation |
 | Grey | idle | followed, nothing new |
 
 Unread clears when you arrive at the conversation, not on a timer. A finished turn is **always** marked unread, even for the conversation that is open in the main view: you may be watching the area itself or another window when the reply lands, and a follow-up prompt turns the row back into the blue running state, so the mark does not pile up. An open conversation left alone stays green until you leave and come back, or click the row once.
 
+A conversation that handed work to subagents behaves the same way: its dispatch turn is over, but the children are still working, so the row keeps reading as running instead of turning unread early. When the last child reports back it falls out of running and takes its place at the top of the unread group.
+
 ### Ordering
 
-Conversations that are running sort last. Everything else sorts by the stamp of its latest activity, newest first, so a reply you just received puts that row at the top. Stamps only grow: two replies in the same millisecond keep a stable order, and re-following a conversation cannot bury it under rows that were already there. Clicking a row's dot to mark it unread refreshes that row's stamp as well, so it returns to the top of the unread/idle group at once; a running row stays last and rises on its own when the run ends.
+Conversations that are running sort last — a conversation waiting on its subagents counts as running. Everything else sorts by the stamp of its latest activity, newest first, so a reply you just received puts that row at the top. Stamps only grow: two replies in the same millisecond keep a stable order, and re-following a conversation cannot bury it under rows that were already there. Clicking a row's dot to mark it unread refreshes that row's stamp as well, so it returns to the top of the unread/idle group at once; a running row stays last and rises on its own when the run ends.
 
 ### What it stores
 
 `localStorage["dsh-watchlist:v1"]` in the browser profile: followed ids, unread ids, and the ordering stamps. There is no server-side state and no sync between browsers. Clearing site data resets the area.
 
-Subagent child sessions are excluded: delegating work should not add rows. Forks are ordinary conversations and can be followed.
+Subagent child sessions are excluded: delegating work should not add rows. Forks are ordinary conversations and can be followed. A parent reads as running while its subagents are still working.
 
 ### The Host half
 
