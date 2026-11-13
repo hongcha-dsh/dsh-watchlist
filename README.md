@@ -10,9 +10,10 @@
 
 - **关注区在对话列表上方**，压在工作区区域上，并把下面的列表整体下推，两边都能用。
 - **每行一个状态圆点**：绿色＝有新回复且你没看过；黄色＝这一轮结束了，在等你；蓝色闪烁＝正在运行；红色＝这一轮失败了。
-- **排序贴合阅读习惯**：有新回复的对话置顶，正在运行的对话置底——它暂时不需要你做什么。
+- **排序贴合阅读习惯**：有新回复的对话置顶，正在运行的对话置底——它暂时不需要你做什么。点某一行的圆点重新标记未读时，这一行同样会顶到未读/空闲组的第一行（正在运行的仍按原规则留在最后）。
 - **自动进入**：出现内容的新对话、重新发起的对话、刚结束一轮的对话、发出新提问的对话，都会自己进入关注区。**只有**点这一行的 X 或输入框旁的那个按钮才会离开。
-- **行操作**：点这一行直接打开；鼠标悬停时出现两个按钮——圆点用于重新标记未读，X 用于结束关注。不悬停时不占位，整行看上去就是「圆点＋标题」。
+- **行操作**：点这一行直接打开；鼠标悬停时出现两个按钮——圆点用于重新标记未读（顺手把这一行顶到最上面），X 用于结束关注。不悬停时不占位，整行看上去就是「圆点＋标题」。
+- **打开即定位**：点关注区的行打开对话后，下方工作区列表会自动展开它所在的分组（包括你手动收起过的）、必要时点开「显示更多」，并滚动到那一行；不需要再自己在列表里翻找。
 - **高度跟着条数走**：有几条就铺几条，只有当它会占满整列、把工作区挤到没有时，才改为自己内部滚动。
 
 ## 安装
@@ -37,11 +38,11 @@ dsh plugin add github:hongcha-dsh/dsh-watchlist
 | 绿色 | 未读 | 有新回复，而当时你没在看着这条对话 |
 | 灰色 | 空闲 | 已关注，没有新动静 |
 
-「未读」在你真正打开那一条对话时清除，不是按时间清除；如果那一条本来就显示在屏幕上，它结束一轮也不会变成未读。
+「未读」在你真正打开那一条对话时清除，不是按时间清除。一轮结束时**总会**标成未读——哪怕这个对话正开着在主视图里，因为你可能在看关注区或别的窗口；你回复后它会变回蓝色的「运行中」，所以不会一直吵。开着没动的那一条则会一直保持绿色，直到你离开再回来、或点它一次。
 
 ## 排序
 
-正在运行的对话排在最后。其余按最近一次活动的排序戳倒序，所以刚收到的回复会把那一行顶到最上面。排序戳只会变大：同一毫秒内的两次回复也能保持稳定顺序，重新关注一条对话也不会把它埋到已有行下面。
+正在运行的对话排在最后。其余按最近一次活动的排序戳倒序，所以刚收到的回复会把那一行顶到最上面。排序戳只会变大：同一毫秒内的两次回复也能保持稳定顺序，重新关注一条对话也不会把它埋到已有行下面。点某一行的圆点重新标记未读时也会刷新这一行的排序戳，于是这一行立刻回到未读/空闲组的第一行；如果它正在运行，则仍留在最后，等这一轮结束再自然置顶。
 
 ## 它存在哪里
 
@@ -75,9 +76,10 @@ Conversations you care about stay in one place at the top of the left sidebar, e
 
 - **A watched area above the conversation list.** It is pinned over the sidebar's workspace region and pushes the list below it down, so both stay usable.
 - **Status dots per row.** Green: a reply arrived that you haven't opened. Yellow: the turn ended and it is waiting for you. Blue, blinking: it is running. Red: the turn failed.
-- **Ordering that matches how you read.** A conversation with news rises to the top; conversations that are running sink to the bottom, because they need nothing from you yet.
+- **Ordering that matches how you read.** A conversation with news rises to the top; conversations that are running sink to the bottom, because they need nothing from you yet. Clicking a row's dot to mark it unread lifts that row to the top of the unread/idle group too (a running row still waits at the bottom).
 - **Rows join on their own.** A new conversation with content, a re-started one, a finished turn, and a new prompt all put that conversation in the area. Leaving is explicit only: the row's X, or the composer toggle.
-- **Row actions.** Click a row to open it. Hover for two buttons: the dot marks it unread again, the X unfollows it. Both are hidden until hover, so the row reads as a title with a dot.
+- **Row actions.** Click a row to open it. Hover for two buttons: the dot marks it unread again and lifts the row to the top, the X unfollows it. Both are hidden until hover, so the row reads as a title with a dot.
+- **Opening locates the row.** Opening a followed conversation also expands its Workspace group below (even one you collapsed by hand), asks for more rows when it sits behind "show more", and scrolls that row into view, so the list below ends up on the same conversation without any manual searching.
 - **The area grows with the list.** Its height follows the number of followed conversations; it only starts scrolling when it would otherwise take the whole sidebar column.
 
 ### Install
@@ -102,11 +104,11 @@ One dot per row, chosen by this priority:
 | Green | unread | a reply arrived while you were not looking at that conversation |
 | Grey | idle | followed, nothing new |
 
-Unread clears when you arrive at the conversation, not on a timer. A conversation that is already on screen does not become unread when its turn ends.
+Unread clears when you arrive at the conversation, not on a timer. A finished turn is **always** marked unread, even for the conversation that is open in the main view: you may be watching the area itself or another window when the reply lands, and a follow-up prompt turns the row back into the blue running state, so the mark does not pile up. An open conversation left alone stays green until you leave and come back, or click the row once.
 
 ### Ordering
 
-Conversations that are running sort last. Everything else sorts by the stamp of its latest activity, newest first, so a reply you just received puts that row at the top. Stamps only grow: two replies in the same millisecond keep a stable order, and re-following a conversation cannot bury it under rows that were already there.
+Conversations that are running sort last. Everything else sorts by the stamp of its latest activity, newest first, so a reply you just received puts that row at the top. Stamps only grow: two replies in the same millisecond keep a stable order, and re-following a conversation cannot bury it under rows that were already there. Clicking a row's dot to mark it unread refreshes that row's stamp as well, so it returns to the top of the unread/idle group at once; a running row stays last and rises on its own when the run ends.
 
 ### What it stores
 

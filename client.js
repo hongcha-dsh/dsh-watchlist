@@ -606,7 +606,7 @@ window.__ModuleLoader__.load({
     /** Locale namespace owned by this plugin. */
     const NS = 'dsh-watchlist'
     /** Generation marker, reported to the Host so a stale page bundle is obvious. */
-    const VERSION = 'v28'
+    const VERSION = 'v32'
     /** Storage key of the durable watch state. */
     const STORAGE_KEY = 'dsh-watchlist:v1'
     /** Host route serving failure notices this page cannot observe itself. */
@@ -873,15 +873,30 @@ window.__ModuleLoader__.load({
             : current)
         }
         /**
-         * Flag a watched conversation as unread from the row's own action.
+         * Flag a watched conversation as unread from the row's own action, and
+         * lift it to the top of the area.
          *
          * Unlike opening a conversation, this is an explicit statement about the
          * row, so `readViewed` must not clear it while the row sits on screen.
+         * The ordering stamp is refreshed with the same monotonic rule as
+         * `applyBurst`: a row the reader just asked to see again belongs at the
+         * top, and clicking the mark again lifts it again instead of silently
+         * doing nothing. Running conversations still sort last — the mark is
+         * recorded, and the row rises as soon as the run ends and re-stamps it.
          */
         const markUnread = id => {
-          store.set(current => current.ids.includes(id) && !current.unread.includes(id)
-            ? { ...current, unread: [...current.unread, id] }
-            : current)
+          store.set(current => {
+            if (!current.ids.includes(id)) return current
+            // Stamps only grow: this row outranks everything a source has
+            // stamped so far, including rows stamped in the same millisecond.
+            let stamp = Date.now()
+            for (const value of Object.values(current.order)) if (value >= stamp) stamp = value + 1
+            return {
+              ...current,
+              unread: current.unread.includes(id) ? current.unread : [...current.unread, id],
+              order: { ...current.order, [id]: stamp },
+            }
+          })
           touch()
         }
 
@@ -1023,9 +1038,9 @@ window.__ModuleLoader__.load({
          * Treat a conversation as read when it comes into view.
          *
          * Only on arrival: re-marking every tick would erase a row the reader
-         * deliberately flagged unread, and would fight the row's own action.
-         * Activity in the open conversation is already kept out of `unread` by
-         * the follow rules.
+         * deliberately flagged unread, and would fight the row's own action. A
+         * finished turn marks its conversation unread even while it is open, so
+         * the flag survives until the reader actually leaves and comes back.
          * @returns {Set<string>} ids the user is looking at.
          */
         const readViewed = () => {
@@ -1152,7 +1167,9 @@ window.__ModuleLoader__.load({
           const snapshot = ctx.sessions.list.getSnapshot()
           if (snapshot.phase !== 'ready') return
           const statuses = statusesOf()
-          const open = readViewed()
+          // Mark whatever came into view as read before diffing, so arrival is
+          // handled once per visit and not re-run on every tick.
+          readViewed()
           const rows = snapshot.byId ?? {}
           const next = new Map()
           for (const [id, row] of Object.entries(rows)) {
@@ -1193,9 +1210,14 @@ window.__ModuleLoader__.load({
               decisions.push(`+${short}:start`)
             } else if (!reading.running && before.running) {
               // A turn just finished: the conversation returns to the area and
-              // rises to the top, unread only while it is not the one on screen.
+              // rises to the top. Every finished turn counts as unread, even the
+              // conversation that is open on screen: the reader may be watching
+              // the area itself or another window while the reply lands, and the
+              // flag costs nothing once a follow-up prompt turns the row blue
+              // again. It clears when the reader arrives at the conversation, the
+              // same way any other unread does.
               enter.push(id)
-              if (!open.has(id)) unread.push(id)
+              unread.push(id)
               decisions.push(`+${short}:end`)
             } else if (before.updatedAt !== reading.updatedAt || before.blank !== reading.blank) {
               // A new prompt (or the first one) advances the row.
@@ -1491,7 +1513,8 @@ window.__ModuleLoader__.load({
         }
 
         /**
-         * Open a conversation the way the sidebar's own rows do.
+         * Open a conversation the way the sidebar's own rows do, then bring its
+         * row in the list below into view.
          * @param {string} id - Session id to open.
          */
         function openSession(id) {
@@ -1500,6 +1523,119 @@ window.__ModuleLoader__.load({
           } catch (error) {
             console.error('[dsh-watchlist] openSession failed', error)
           }
+          revealInList(id)
+        }
+
+        /**
+         * Escape one value for use inside an attribute selector.
+         * @param {string} value - raw attribute value.
+         * @returns {string} selector-safe text.
+         */
+        const attrValue = value => typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(value)
+          : String(value).replace(/["\\]/g, '\\$&')
+
+        /**
+         * Workspace groups a Session is listed under, outermost ancestor first.
+         *
+         * The list below groups rows by Workspace and every group is collapsible;
+         * a Session inside a manually collapsed group renders no row at all. Group
+         * keys double as the `data-row-key` suffix, so this is the chain to expand
+         * before hunting for the row. Nested grouping is optional and `''` is the
+         * ungrouped bucket, so absent headers are expected and simply skipped.
+         * @param {string} id - Session id.
+         * @returns {string[]} group keys, outermost first.
+         */
+        const groupsOf = id => {
+          try {
+            const items = ctx.get('workspaces')?.list?.getSnapshot()?.items
+            if (!Array.isArray(items)) return ['']
+            const owner = items.find(item => Array.isArray(item?.sessionIds) && item.sessionIds.includes(id))
+            if (owner === undefined) return ['']
+            const chain = [owner.workspaceId]
+            let path = owner.path
+            for (let depth = 0; depth < 16 && typeof path === 'string'; depth += 1) {
+              // A parent group exists when another Workspace path is a directory
+              // ancestor of this one; the longest such path is the immediate parent.
+              const parent = items
+                .filter(item => typeof item?.path === 'string' && item.path !== path
+                  && (path.startsWith(item.path + '/') || path.startsWith(item.path + '\\')))
+                .sort((a, b) => b.path.length - a.path.length)[0]
+              if (parent === undefined) break
+              chain.unshift(parent.workspaceId)
+              path = parent.path
+            }
+            return chain
+          } catch {
+            return ['']
+          }
+        }
+
+        /**
+         * Scroll the just-opened conversation's sidebar row into view.
+         *
+         * `uiWorkspace.openSession` mirrors a click on the list row, so the row is
+         * already selected; it never scrolls the list, though, keeps a manually
+         * collapsed Workspace group closed, and leaves a deep Session behind its
+         * group's row watermark. The workspace plugin owns that reveal for its own
+         * search results but exposes no service for it, so the row is located and
+         * revealed in the DOM instead. Every step is optional and bounded; when the
+         * row cannot be found (an archived Session, an open search result list, a
+         * future DOM change) the panel simply stays quiet, because the conversation
+         * itself already opened.
+         * @param {string} id - Session id that was just opened.
+         */
+        const revealInList = id => {
+          if (typeof document === 'undefined' || typeof window === 'undefined') return
+          const chain = groupsOf(id)
+          const rowSelector = `[data-row-key="session:${attrValue(id)}"]`
+          const rowOf = () => document.querySelector(rowSelector)
+          /** Expand one still-collapsed group header; true when a click was issued. */
+          const expandNext = () => {
+            for (const key of chain) {
+              const header = document.querySelector(`[data-row-key="workspace:${attrValue(key)}"]`)
+              if (header === null || header.getAttribute('aria-expanded') !== 'false') continue
+              header.click()
+              return true
+            }
+            return false
+          }
+          /** Ask a group to show more rows when the target sits behind its watermark. */
+          const askForMore = () => {
+            for (const key of chain) {
+              const button = document.querySelector(`[data-row-key="overflow:${attrValue(key)}"]`)
+              if (button === null || button.getAttribute('aria-expanded') !== 'false') continue
+              button.click()
+              return true
+            }
+            return false
+          }
+          let frames = 0
+          let expansions = 0
+          let requests = 0
+          const finish = () => {
+            const row = rowOf()
+            if (row === null) return false
+            row.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+            return true
+          }
+          const step = () => {
+            if (finish()) {
+              noteDebug(`reveal:${id.slice(-6)}:hit:${frames}:g${expansions}:m${requests}`)
+              return
+            }
+            frames += 1
+            // One paint first: the list auto-expands the current Session's group
+            // unless the user collapsed it by hand, and then the row already exists.
+            if (frames >= 6 && expansions < chain.length && (frames - 6) % 6 === 0) {
+              if (expandNext()) expansions += 1
+            } else if (frames > 8 && frames % 12 === 0 && requests < 12) {
+              if (askForMore()) requests += 1
+            }
+            if (frames < 180) window.requestAnimationFrame(step)
+            else noteDebug(`reveal:${id.slice(-6)}:miss:g${expansions}:m${requests}`)
+          }
+          window.requestAnimationFrame(step)
         }
 
         // ---- registrations --------------------------------------------------
