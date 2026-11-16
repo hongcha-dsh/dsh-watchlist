@@ -2,7 +2,7 @@
 // left of the composer's model selector. Plain browser module: React comes from
 // the page's module table, everything else is written here.
 window.__ModuleLoader__.load({
-  id: 'dsh-watchlist',
+  id: '@hongcha-dsh/dsh-watchlist',
   factory: require => {
     const React = require('react')
     const h = React.createElement

@@ -19,10 +19,19 @@
 ## 安装
 
 ```sh
+# 推荐：从 npm 装（预构建，免构建授权）
+dsh plugin add @hongcha-dsh/dsh-watchlist
+```
+
+也可以直接装源码：
+
+```sh
 dsh plugin add github:hongcha-dsh/dsh-watchlist
 ```
 
 装完重启 Harness：前端在下次加载页面时生效，Host 那一半需要重启。
+
+> 1.0.6 起包名改为 `@hongcha-dsh/dsh-watchlist`（npm 上的 `dsh-watchlist` 是别人的包）。从旧源码装过的，先 `dsh plugin remove dsh-watchlist` 再装新的；关注列表存在浏览器本地，重装不会丢。
 
 要求：带 Web UI 的 `dsh`（用到客户端插槽 `shell.overlay`、`conversation.input.right`，以及 `uiSession` / `uiWorkspace` 服务）。开发和实际使用都在 `0.2.1-rc` 与 `0.2.2-rc` 上。
 
@@ -96,12 +105,21 @@ Conversations you care about stay in one place at the top of the left sidebar, e
 ### Install
 
 ```sh
+# recommended: from npm (prebuilt, no build approval)
+dsh plugin add @hongcha-dsh/dsh-watchlist
+```
+
+Or install the source straight from GitHub:
+
+```sh
 dsh plugin add github:hongcha-dsh/dsh-watchlist
 ```
 
 Then restart Harness. The Client half is served on the next page load; the Host half needs the restart.
 
-Requirements: a `dsh` build with the Web UI (the plugin uses the client slots `shell.overlay` and `conversation.input.right`, and the `uiSession` / `uiWorkspace` services). Developed and used against `0.2.1-rc`.
+> From 1.0.6 the package is `@hongcha-dsh/dsh-watchlist` (the bare `dsh-watchlist` on npm belongs to someone else). If you installed from source before, run `dsh plugin remove dsh-watchlist` first — the watch list lives in browser storage, so it survives a reinstall.
+
+Requirements: a `dsh` build with the Web UI (the plugin uses the client slots `shell.overlay` and `conversation.input.right`, and the `uiSession` / `uiWorkspace` services). Developed and used against `0.2.1-rc` and `0.2.2-rc`.
 
 ### Which conversation gets which dot
 
