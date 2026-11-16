@@ -24,7 +24,15 @@ dsh plugin add github:hongcha-dsh/dsh-watchlist
 
 装完重启 Harness：前端在下次加载页面时生效，Host 那一半需要重启。
 
-要求：带 Web UI 的 `dsh`（用到客户端插槽 `shell.overlay`、`conversation.input.right`，以及 `uiSession` / `uiWorkspace` 服务）。开发和实际使用都在 `0.2.1-rc` 上。
+要求：带 Web UI 的 `dsh`（用到客户端插槽 `shell.overlay`、`conversation.input.right`，以及 `uiSession` / `uiWorkspace` 服务）。开发和实际使用都在 `0.2.1-rc` 与 `0.2.2-rc` 上。
+
+## 锁住侧栏顶部
+
+关注区标题右边有个锁形按钮，默认是锁上的。锁住时，品牌、新会话、侧栏顶部那排入口（插件、自动化任务、上下文洞察、更多）和关注区都留在原处，只有工作区里的会话列表滚动；点一下解锁，就回到宿主自己那套滚动——滚轮先把顶部导航滚走，再滚列表。
+
+这一项是为了配合 `0.2.2` 的侧栏：它把「面板导航 + 工作区」放进同一个滚动视口，滚轮先把导航滚走，于是关注区赖以定位的工作区块会整体上移，浮层跟着走，和下面的内容叠在一起。锁住等于把这段改回 `0.2.1` 的高度分配——视口不再滚动，工作区块拿剩余高度，会话列表在区块内部自己滚（用 `container-type:size` 让浏览器的 `100cqh` 等于"关注区下面剩下的空间"）。
+
+在 `0.2.1` 及更早的宿主上这些标记不存在，锁住是空操作；换宿主版本后若侧栏结构又变，解锁即可回到原生行为。
 
 ## 圆点是怎么判定的
 
@@ -48,7 +56,7 @@ dsh plugin add github:hongcha-dsh/dsh-watchlist
 
 ## 它存在哪里
 
-浏览器 profile 里的 `localStorage["dsh-watchlist:v1"]`：关注的 id、未读的 id、排序戳。没有服务端状态，也不跨浏览器同步，清站点数据就重置。
+浏览器 profile 里的 `localStorage["dsh-watchlist:v1"]`：关注的 id、未读的 id、排序戳，以及顶部锁定开关（`pinned`，缺省为锁上）。没有服务端状态，也不跨浏览器同步，清站点数据就重置。
 
 子代理（subagent）的子会话不进关注区——分派工作不该多出一行；fork 出来的对话是普通对话，可以关注。派了子代理的父会话在子代理跑完之前按「运行中」显示。
 
@@ -83,6 +91,7 @@ Conversations you care about stay in one place at the top of the left sidebar, e
 - **Row actions.** Click a row to open it. Hover for two buttons: the dot marks it unread again and lifts the row to the top, the X unfollows it. Both are hidden until hover, so the row reads as a title with a dot.
 - **Opening locates the row.** Opening a followed conversation also expands its Workspace group below (even one you collapsed by hand), asks for more rows when it sits behind "show more", and scrolls that row into view, so the list below ends up on the same conversation without any manual searching.
 - **The area grows with the list.** Its height follows the number of followed conversations; it only starts scrolling when it would otherwise take the whole sidebar column.
+- **A lock on the top block.** The lock button beside the area's title keeps the brand, New Session, the panel entries and this area where they are, so only the session list scrolls. It is locked by default; unlocking restores the sidebar's own wheel hand-off. It exists because `0.2.2` puts the panel navigation and the workspace section in one scroll viewport, which walks the section — and this area's anchor — up out of the sidebar; locking gives the section the remaining height instead and lets its list scroll inside. On `0.2.1` and older hosts the markers are absent, so the lock is a no-op there.
 
 ### Install
 

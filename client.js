@@ -532,6 +532,22 @@ window.__ModuleLoader__.load({
       flex:none;color:var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
       font-size:14px;line-height:20px;font-weight:400;opacity:.75;
     }
+    /* Header lock toggle: quiet ink like the count, lit while the top block is
+       pinned. It keeps its slot at all times so the title never shifts. */
+    .dshwl-pin{
+      flex:none;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;
+      padding:0;border:none;border-radius:var(--dsw-radius-sm,4px);background:transparent;
+      color:var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));cursor:pointer;
+      opacity:.7;transition:opacity .12s ease,color .12s ease,background .12s ease;
+    }
+    .dshwl-pin:hover{opacity:1;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+    .dshwl-pin[data-pinned="true"]{
+      opacity:1;color:var(--dsw-alias-state-business-primary,var(--dsw-static-deepseek-500));
+    }
+    .dshwl-pin:focus-visible{
+      outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-alias-state-business-primary,var(--dsw-static-deepseek-500));
+      outline-offset:1px;
+    }
     .dshwl-list{display:flex;flex-direction:column;gap:1px;flex:0 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
     .dshwl-row{
       display:flex;align-items:center;gap:8px;box-sizing:border-box;min-height:30px;width:100%;
@@ -578,6 +594,32 @@ window.__ModuleLoader__.load({
     }
     `
 
+    /**
+     * Styles that pin the sidebar's top block, emitted only while the lock is on.
+     *
+     * The 0.2.2 sidebar hands the wheel to its own navigation first: the panel rows
+     * and the whole Workspace section slide away inside `[data-sidebar-scrollport]`
+     * before the session list moves. That walks this panel's anchor (it is placed
+     * from the section's rect) up out of the sidebar and drags the list under it,
+     * so the watch area stops being pinned. Locking keeps the viewport still and
+     * gives the section the remaining height instead: `container-type:size` on the
+     * section makes the browser's own `100cqh` resolve to the space left below this
+     * panel, and the session list scrolls inside it. The marker only exists in the
+     * expanded sidebar, so the rail layout is untouched.
+     */
+    const PINNED_CSS = `
+    [data-sidebar-scrollport]{
+      grid-template-rows:8px max-content 2px minmax(0,1fr)!important;
+      /* clip rather than hidden: a hidden box is still scrollable by script,
+         and the sidebar's wheel hand-off writes scrollTop directly. */
+      overflow:clip!important;
+    }
+    [data-sidebar-scrollport]>div{min-height:0!important}
+    [data-sidebar-scrollport] [data-slot="sidebar.workspaces"]{container-type:size!important}
+    /* Nothing may read through the reserved band, so the panel paints its own fill. */
+    .dshwl-panel{background:var(--dsw-specific-sidebar-fill,var(--dsw-alias-bg-base))}
+    `
+
     /** Styles for the composer's follow toggle: an underlined text button beside the model. */
     const FOLLOW_CSS = `
     .dshwl-follow{
@@ -606,7 +648,7 @@ window.__ModuleLoader__.load({
     /** Locale namespace owned by this plugin. */
     const NS = 'dsh-watchlist'
     /** Generation marker, reported to the Host so a stale page bundle is obvious. */
-    const VERSION = 'v39'
+    const VERSION = 'v40'
     /** Storage key of the durable watch state. */
     const STORAGE_KEY = 'dsh-watchlist:v1'
     /** Host route serving failure notices this page cannot observe itself. */
@@ -678,6 +720,8 @@ window.__ModuleLoader__.load({
       'panel.blank': '新会话',
       'follow.on': '取消关注',
       'follow.off': '关注',
+      'panel.pinOn': '锁住顶部',
+      'panel.pinOff': '取消锁住顶部',
     }
     const en = {
       'panel.title': 'Watchlist',
@@ -694,6 +738,8 @@ window.__ModuleLoader__.load({
       'panel.blank': 'New session',
       'follow.on': 'Unwatch',
       'follow.off': 'Watch',
+      'panel.pinOn': 'Pin the top block',
+      'panel.pinOff': 'Unpin the top block',
     }
     const STATUS_KEY = {
       unread: 'panel.unread',
@@ -728,10 +774,10 @@ window.__ModuleLoader__.load({
 
     /**
      * Read the durable watch state, tolerating absent or corrupt storage.
-     * @returns {{ ids: string[], unread: string[], order: Record<string, number> }} normalized state.
+     * @returns {{ ids: string[], unread: string[], order: Record<string, number>, pinned: boolean }} normalized state.
      */
     function readState() {
-      const empty = { ids: [], unread: [], order: {} }
+      const empty = { ids: [], unread: [], order: {}, pinned: true }
       try {
         const raw = window.localStorage.getItem(STORAGE_KEY)
         if (raw === null) return empty
@@ -748,6 +794,9 @@ window.__ModuleLoader__.load({
           ids: strings(parsed.ids),
           unread: strings(parsed.unread),
           order,
+          // Absent means "never chosen": the lock ships on, so a page that has
+          // stored nothing but followed conversations keeps the fixed top block.
+          pinned: parsed.pinned !== false,
         }
       } catch {
         return empty
@@ -838,6 +887,7 @@ window.__ModuleLoader__.load({
               ids: current.ids,
               unread: current.unread,
               order: current.order,
+              pinned: current.pinned,
             }))
           } catch {
             /* storage unavailable: the page keeps working from memory */
@@ -873,6 +923,20 @@ window.__ModuleLoader__.load({
           store.set(current => current.unread.includes(id)
             ? { ...current, unread: current.unread.filter(item => item !== id) }
             : current)
+        }
+        /**
+         * Lock or release the sidebar's top block.
+         *
+         * Locked, the brand, the New Session control, the panel navigation and this
+         * watch area stay where they are and only the session list scrolls; released,
+         * the sidebar keeps its own wheel hand-off, which moves the navigation away
+         * first. The choice is durable, so a page that pinned once stays pinned.
+         * @param {boolean} next - whether the top block is locked.
+         */
+        const setPinned = next => {
+          if (store.get().pinned === next) return
+          store.set(current => ({ ...current, pinned: next }))
+          touch()
         }
         /**
          * Flag a watched conversation as unread from the row's own action, and
@@ -1331,6 +1395,9 @@ window.__ModuleLoader__.load({
          */
         function WatchPanel() {
           const model = useModel()
+          // The lock is a layout choice, not part of the row model, so it is read
+          // from the same durable store the header button writes.
+          const pinned = store.get().pinned !== false
           const [box, setBox] = React.useState(null)
 
           // The workspace region is the anchor: the panel starts at its top edge,
@@ -1541,6 +1608,39 @@ window.__ModuleLoader__.load({
             }, [
               h('div', { className: 'dshwl-head', key: 'head' },
                 h('span', { className: 'dshwl-head-title' }, t('panel.title')),
+                h('button', {
+                  key: 'pin',
+                  type: 'button',
+                  className: 'dshwl-pin',
+                  'data-pinned': pinned ? 'true' : 'false',
+                  'aria-pressed': pinned,
+                  'aria-label': t(pinned ? 'panel.pinOff' : 'panel.pinOn'),
+                  title: t(pinned ? 'panel.pinOff' : 'panel.pinOn'),
+                  onClick: () => { setPinned(!pinned) },
+                }, h('svg', {
+                  viewBox: '0 0 16 16',
+                  width: 13,
+                  height: 13,
+                  fill: 'none',
+                  'aria-hidden': 'true',
+                },
+                h('path', {
+                  d: 'M5.2 7V5.1a2.8 2.8 0 0 1 5.6 0V7',
+                  stroke: 'currentColor',
+                  strokeWidth: 1.3,
+                  strokeLinecap: 'round',
+                }),
+                h('rect', {
+                  x: 3.3,
+                  y: 7,
+                  width: 9.4,
+                  height: 6.1,
+                  rx: 1.6,
+                  stroke: 'currentColor',
+                  strokeWidth: 1.3,
+                  fill: pinned ? 'currentColor' : 'none',
+                  fillOpacity: pinned ? 0.18 : 0,
+                }))),
                 model.entries.length > 0
                   ? h('span', { className: 'dshwl-count', key: 'count' }, String(model.entries.length))
                   : null),
@@ -1549,6 +1649,22 @@ window.__ModuleLoader__.load({
                 : h('div', { className: 'dshwl-list', key: 'list' }, rows),
             ]),
           )
+        }
+
+        /**
+         * Emit the lock stylesheet while the sidebar top block is pinned.
+         *
+         * This rides its own `shell.overlay` seat instead of the panel's, because
+         * the panel unmounts whenever the sidebar reports an unusable box; tying the
+         * layout to that measurement would drop the override, change the measured
+         * box, and bring the override back — a loop on short windows.
+         * @returns {import('react').ReactElement | null} the style element, or nothing while unlocked.
+         */
+        function PinnedStyles() {
+          React.useSyncExternalStore(revision.subscribe, revision.get, revision.get)
+          return store.get().pinned !== false
+            ? h('style', { 'data-dshwl-pinned': '' }, PINNED_CSS)
+            : null
         }
 
         /**
@@ -1718,6 +1834,12 @@ window.__ModuleLoader__.load({
             id: 'dsh-watchlist.panel',
             order: 40,
           }, WatchPanel))
+
+          ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+            name: 'shell.overlay',
+            id: 'dsh-watchlist.pinned',
+            order: 39,
+          }, PinnedStyles))
 
           ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
             name: 'conversation.input.right',
